@@ -1,9 +1,13 @@
 """News image for 23 November 2026 (make.fun news-image-20261123).
 
-Draws one 1024x1024 flat illustration with PIL and writes it to
-/output/entry.png. Deterministic: no randomness, no timestamps, no
-network. The image is 1024x1024 pixels and under 1 MiB.
-Output verified byte-identical across runs (same sha256 every run).
+Redesigned as a real editorial newspaper front page: one dominant lead
+story (COP31), the other stories as a compact headline list separated by
+thin rules, no cartoon icons, paper off-white, ink navy, one red accent
+for the lead headline only. Redesigned 23 Nov 2026 to remove the flat
+template look (v2 editorial layout).
+Draws with PIL and writes to /output/entry.png.
+Deterministic: no randomness, no timestamps, no network.
+The image is 1024x1024 pixels and under 1 MiB.
 """
 
 import os
@@ -13,17 +17,18 @@ from PIL import Image, ImageDraw, ImageFont
 W, H = 1024, 1024
 OUT = "/output/entry.png"
 
-PAPER = (250, 245, 233)
+PAPER = (247, 243, 232)
 NAVY = (15, 42, 61)
-GOLD = (193, 154, 61)
-RED = (178, 44, 36)
-TEAL = (32, 110, 130)
-SKY = (220, 233, 242)
-EARTH = (176, 124, 74)
-DARK_EARTH = (122, 82, 46)
-WHITE = (255, 255, 255)
 INK = (24, 28, 32)
-GREY = (90, 96, 100)
+GREY = (96, 100, 102)
+RED = (178, 44, 36)
+GOLD = (176, 138, 58)
+RULE = (198, 190, 172)
+OCEAN = (133, 158, 176)
+OCEAN_DARK = (110, 136, 156)
+LAND = (184, 138, 86)
+LAND_DARK = (139, 106, 69)
+EARTH = (166, 124, 78)
 
 FONT_DIR = "/usr/share/fonts/truetype/dejavu"
 
@@ -35,8 +40,14 @@ def font(name, size):
         return ImageFont.load_default()
 
 
-BOLD = lambda s: font("DejaVuSans-Bold.ttf", s)  # noqa: E731
-REG = lambda s: font("DejaVuSans.ttf", s)  # noqa: E731
+SERIF_BOLD = lambda s: font("DejaVuSerif-Bold.ttf", s)  # noqa: E731
+SERIF = lambda s: font("DejaVuSerif.ttf", s)  # noqa: E731
+SANS_BOLD = lambda s: font("DejaVuSans-Bold.ttf", s)  # noqa: E731
+
+
+def spaced(text, n=1):
+    """Letterspace a kicker: insert n spaces between characters."""
+    return (" " * n).join(text)
 
 
 def wrap(draw, text, fnt, max_w):
@@ -58,179 +69,114 @@ def wrap(draw, text, fnt, max_w):
 
 def text_block(draw, x, y, text, fnt, color, max_w, leading=None):
     """Draw wrapped text, return y after the last line."""
-    leading = leading or int(fnt.size * 1.25)
+    leading = leading or int(fnt.size * 1.3)
     for line in wrap(draw, text, fnt, max_w):
         draw.text((x, y), line, font=fnt, fill=color)
         y += leading
     return y
 
 
-def draw_globe(draw, cx, cy, r):
-    """Cracked dry-earth globe: blue ocean, brown land, black cracks."""
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(66, 135, 178))
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=NAVY, width=5)
-    # Land masses (flat brown blobs, kept inside the circle).
-    draw.ellipse([cx - 95, cy - 70, cx - 30, cy - 10], fill=EARTH)
-    draw.ellipse([cx - 20, cy + 20, cx + 75, cy + 90], fill=EARTH)
-    draw.ellipse([cx + 30, cy - 90, cx + 70, cy - 40], fill=DARK_EARTH)
-    # Cracks across the globe.
-    draw.line([(cx - r + 18, cy - 40), (cx - 30, cy + 5), (cx - 55, cy + 45)],
-              fill=INK, width=5)
-    draw.line([(cx + 10, cy - r + 25), (cx + 45, cy - 20), (cx + 30, cy + 35)],
-              fill=INK, width=5)
-    draw.line([(cx - 30, cy + 5), (cx + 5, cy + 25)], fill=INK, width=4)
-
-
-def draw_tanker(draw, x, y, w, h):
-    """Oil tanker on a teal sea with a small flame on deck."""
-    sea_y = y + int(h * 0.62)
-    draw.rectangle([x, sea_y, x + w, y + h], fill=TEAL)
-    for i in range(3):
-        wy = sea_y + 14 + i * 16
-        draw.line([(x + 8, wy), (x + w - 8, wy)], fill=(120, 190, 205), width=3)
-    # Hull.
-    draw.polygon([(x + 12, sea_y - 6), (x + w - 12, sea_y - 6),
-                  (x + w - 34, sea_y + 26), (x + 34, sea_y + 26)], fill=RED)
-    # Deck containers.
-    draw.rectangle([x + 30, sea_y - 34, x + 70, sea_y - 6], fill=GOLD)
-    draw.rectangle([x + 78, sea_y - 34, x + 118, sea_y - 6], fill=WHITE)
-    draw.rectangle([x + 126, sea_y - 34, x + 166, sea_y - 6], fill=(70, 70, 70))
-    # Bridge tower.
-    draw.rectangle([x + w - 58, sea_y - 52, x + w - 22, sea_y - 6], fill=NAVY)
-    # Flame on deck (kept inside the drawing area).
-    fx = x + 52
-    draw.polygon([(fx, sea_y - 62), (fx + 14, sea_y - 40), (fx + 28, sea_y - 62),
-                  (fx + 14, sea_y - 50)], fill=(240, 140, 40))
-    draw.polygon([(fx + 7, sea_y - 54), (fx + 14, sea_y - 40),
-                  (fx + 21, sea_y - 54)], fill=(250, 210, 60))
-
-
-def draw_capitol(draw, x, y, w, h):
-    """US Capitol dome silhouette in white on navy (fits inside h)."""
-    base = y + h - 4
-    # Steps.
-    draw.rectangle([x + 20, base - 5, x + w - 20, base], fill=NAVY)
-    draw.rectangle([x + 34, base - 10, x + w - 34, base - 5], fill=NAVY)
-    # Columns.
-    for i in range(5):
-        cx = x + 52 + i * 42
-        draw.rectangle([cx, base - 38, cx + 14, base - 10], fill=NAVY)
-    # Dome.
-    draw.rectangle([x + 52, base - 43, x + w - 52, base - 38], fill=NAVY)
-    draw.pieslice([x + w // 2 - 48, base - 78, x + w // 2 + 48, base - 43],
-                  180, 360, fill=NAVY)
-    draw.rectangle([x + w // 2 - 4, base - 86, x + w // 2 + 4, base - 78],
-                   fill=NAVY)
-    draw.ellipse([x + w // 2 - 7, base - 92, x + w // 2 + 7, base - 80],
-                 fill=NAVY)
-    # Ballot box.
-    draw.rectangle([x + w - 78, base - 24, x + w - 34, base - 4], fill=GOLD)
-    draw.polygon([(x + w - 66, base - 32), (x + w - 46, base - 32),
-                  (x + w - 56, base - 24)], fill=NAVY)
-
-
-def draw_handcuffs(draw, x, y, w, h):
-    """Two gold handcuff rings joined by a chain, on dark slate."""
-    cy = y + h // 2 + 6
-    for cx in (x + 62, x + w - 62):
-        draw.ellipse([cx - 44, cy - 44, cx + 44, cy + 44],
-                     outline=GOLD, width=12)
-        draw.ellipse([cx - 20, cy - 20, cx + 20, cy + 20],
-                     outline=GOLD, width=4)
-    # Chain links between the rings.
-    for i, cx in enumerate(range(x + 118, x + w - 118, 26)):
-        draw.ellipse([cx, cy - 10, cx + 20, cy + 10], outline=WHITE, width=4)
-
-
-def draw_warship(draw, x, y, w, h):
-    """Grey warship on a dark sea with two small drones above."""
-    sea_y = y + int(h * 0.66)
-    draw.rectangle([x, sea_y, x + w, y + h], fill=(28, 68, 96))
-    draw.line([(x + 10, sea_y + 16), (x + w - 10, sea_y + 16)],
-              fill=(120, 170, 200), width=3)
-    # Hull.
-    draw.polygon([(x + 14, sea_y - 4), (x + w - 14, sea_y - 4),
-                  (x + w - 40, sea_y + 24), (x + 40, sea_y + 24)],
-                 fill=(70, 78, 86))
-    # Superstructure and mast.
-    draw.rectangle([x + w // 2 - 50, sea_y - 34, x + w // 2 + 30, sea_y - 4],
-                   fill=(96, 104, 112))
-    draw.rectangle([x + w // 2 + 8, sea_y - 58, x + w // 2 + 16, sea_y - 34],
-                   fill=(96, 104, 112))
-    # Drones: small quadcopters with rotor lines.
-    for dx in (x + 60, x + w - 90):
-        dy = y + 18
-        draw.ellipse([dx - 8, dy - 6, dx + 8, dy + 6], fill=INK)
-        draw.line([(dx - 22, dy - 8), (dx + 22, dy - 8)], fill=INK, width=3)
-        draw.line([(dx - 22, dy + 8), (dx + 22, dy + 8)], fill=INK, width=3)
-    # Blast star near the bow.
-    bx, by = x + w - 60, sea_y - 46
-    draw.polygon([(bx, by - 18), (bx + 6, by - 6), (bx + 18, by - 4),
-                  (bx + 8, by + 6), (bx + 12, by + 18), (bx, by + 10),
-                  (bx - 12, by + 18), (bx - 8, by + 6), (bx - 18, by - 4),
-                  (bx - 6, by - 6)], fill=(250, 190, 40))
+def draw_globe(img, cx, cy, r):
+    """Cracked globe, drawn with care: muted ocean, ochre land clipped to
+    the circle, fine 2px crack lines, a dry-earth band at the bottom."""
+    # Land layer, clipped to the circle by a mask.
+    globe = Image.new("RGB", (2 * r, 2 * r), OCEAN)
+    g = ImageDraw.Draw(globe)
+    # Subtle ocean shading: a darker band low on the disc.
+    g.ellipse([-r, r // 2, 2 * r, 3 * r], fill=OCEAN_DARK)
+    # Land masses (organic shapes).
+    g.ellipse([18, 30, 128, 108], fill=LAND)
+    g.ellipse([150, 34, 268, 128], fill=LAND_DARK)
+    g.ellipse([52, 168, 190, 262], fill=LAND)
+    g.ellipse([208, 190, 262, 238], fill=LAND_DARK)
+    # Dry-earth band across the bottom of the disc.
+    g.polygon([(0, 236), (2 * r, 216), (2 * r, 2 * r), (0, 2 * r)], fill=EARTH)
+    # Fine cracks: one long branching crack, plus small ones.
+    g.line([(60, 60), (110, 120), (96, 168), (140, 210)], fill=INK, width=2)
+    g.line([(110, 120), (150, 132)], fill=INK, width=2)
+    g.line([(96, 168), (70, 196)], fill=INK, width=2)
+    g.line([(190, 60), (200, 110), (176, 150)], fill=INK, width=2)
+    g.line([(200, 110), (232, 122)], fill=INK, width=2)
+    g.line([(30, 240), (90, 232), (140, 246), (210, 234), (270, 244)],
+           fill=INK, width=2)
+    g.line([(90, 232), (100, 262)], fill=INK, width=2)
+    g.line([(210, 234), (196, 264)], fill=INK, width=2)
+    # Stipple: a few small dots for dry texture on the band.
+    for dx, dy in ((40, 262), (150, 272), (230, 262), (120, 252), (260, 276)):
+        g.ellipse([dx - 2, dy - 2, dx + 2, dy + 2], fill=LAND_DARK)
+    mask = Image.new("L", (2 * r, 2 * r), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, 2 * r, 2 * r], fill=255)
+    img.paste(globe, (cx - r, cy - r), mask)
+    d = ImageDraw.Draw(img)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=NAVY, width=3)
 
 
 def build():
     img = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(img)
+    M = 48  # left/right margin, used everywhere
 
-    # --- Masthead -------------------------------------------------------
-    d.rectangle([0, 0, W, 148], fill=NAVY)
-    d.rectangle([0, 148, W, 156], fill=GOLD)
-    d.text((W // 2, 16), "WORLD NEWS", font=BOLD(78), fill=WHITE, anchor="ma")
-    d.text((W // 2, 104), "MONDAY  23  NOVEMBER  2026", font=BOLD(34),
-           fill=GOLD, anchor="ma")
+    # --- Nameplate -------------------------------------------------------
+    d.text((W // 2, 28), "WORLD NEWS", font=SERIF_BOLD(66), fill=NAVY,
+           anchor="ma")
+    d.text((W // 2, 104), spaced("MONDAY, 23 NOVEMBER 2026"),
+           font=SANS_BOLD(19), fill=GREY, anchor="ma")
+    d.line([(M, 138), (W - M, 138)], fill=NAVY, width=3)
+    d.line([(M, 144), (W - M, 144)], fill=GOLD, width=1)
 
     # --- Lead story: COP31 ---------------------------------------------
-    d.rectangle([24, 176, 1000, 556], fill=SKY, outline=NAVY, width=3)
-    # Dry cracked ground at the bottom of the panel.
-    d.polygon([(24, 470), (1000, 470), (1000, 556), (24, 556)], fill=EARTH)
-    d.line([(120, 470), (200, 510), (180, 556)], fill=DARK_EARTH, width=5)
-    d.line([(420, 470), (470, 505), (540, 556)], fill=DARK_EARTH, width=5)
-    d.line([(760, 470), (720, 512), (790, 556)], fill=DARK_EARTH, width=5)
-    # Globe, left.
-    draw_globe(d, 190, 320, 120)
-    # Headline, right.
-    text_block(d, 350, 196, "COP31 DEAL", BOLD(58), NAVY, 620)
-    text_block(d, 350, 262, "COLLAPSES", BOLD(58), RED, 620)
-    text_block(d, 350, 340,
-               "Climate talks fail on a fossil-fuel phase-out",
-               BOLD(28), INK, 600, leading=36)
-    text_block(d, 350, 420,
-               "Negotiators walk out as the talks fail",
-               REG(24), GREY, 600, leading=32)
+    d.text((M, 168), spaced("CLIMATE  •  COP31"), font=SANS_BOLD(18),
+           fill=GREY)
+    # Headline, two lines; the word "collapses" carries the only red.
+    d.text((M, 196), "COP31 deal", font=SERIF_BOLD(64), fill=NAVY)
+    d.text((M, 268), "collapses", font=SERIF_BOLD(64), fill=RED)
+    text_block(d, M, 356,
+               "Climate talks fail on a fossil-fuel phase-out as "
+               "negotiators walk out.",
+               SERIF(26), INK, 480, leading=34)
+    d.text((M, 470), "The summit ends without agreement",
+           font=SERIF(20), fill=GREY)
+    d.text((M, 496), "on ending fossil fuels.",
+           font=SERIF(20), fill=GREY)
 
-    # --- Three panels ----------------------------------------------------
-    panels = [
-        ("STRAIT OF HORMUZ", "TANKERS HIT", "Two tankers attacked; US-Iran tension rises",
-         draw_tanker, TEAL),
-        ("UNITED STATES", "DEMOCRATS WIN CONGRESS", "Voters hand Congress to the Democrats",
-         draw_capitol, NAVY),
-        ("MEXICO", "CARTEL CHIEF ARRESTED", "Chapo Isidro captured after long hunt",
-         draw_handcuffs, (52, 52, 58)),
+    # Cracked globe, right of the headline; cracked ground beneath it.
+    draw_globe(img, 800, 330, 148)
+    d = ImageDraw.Draw(img)
+    d.ellipse([648, 492, 952, 506], fill=(222, 214, 196))
+    d.line([(660, 500), (720, 492), (760, 502), (830, 494), (900, 500),
+            (940, 496)], fill=INK, width=2)
+
+    # --- Rule, then the rest of the news as a headline list -------------
+    d.line([(M, 548), (W - M, 548)], fill=NAVY, width=2)
+    d.text((M, 566), spaced("MORE FROM AROUND THE WORLD"),
+           font=SANS_BOLD(16), fill=GREY)
+
+    stories = [
+        ("STRAIT OF HORMUZ",
+         "Tankers hit in the Strait of Hormuz",
+         "Two tankers attacked; US\u2013Iran tension rises."),
+        ("UNITED STATES",
+         "Democrats win Congress",
+         "Voters hand Congress to the Democrats."),
+        ("MEXICO",
+         "Cartel chief arrested",
+         "Chapo Isidro captured after a long hunt."),
+        ("LIBYA",
+         "Ukraine drones hit Russian warship off Benghazi",
+         "A Russian warship is struck off the Libyan coast."),
     ]
-    pw, gap, py, ph = 312, 20, 576, 264
-    for i, (kicker, title, caption, draw_fn, color) in enumerate(panels):
-        x = 24 + i * (pw + gap)
-        d.rectangle([x, py, x + pw, py + ph], fill=WHITE, outline=NAVY, width=3)
-        d.rectangle([x, py, x + pw, py + 34], fill=color)
-        d.text((x + 12, py + 5), kicker, font=BOLD(19), fill=WHITE)
-        draw_fn(d, x + 12, py + 44, pw - 24, 96)
-        y = py + 150
-        y = text_block(d, x + 12, y, title, BOLD(24), NAVY, pw - 24, leading=30)
-        text_block(d, x + 12, y + 4, caption, REG(19), GREY, pw - 24, leading=25)
-
-    # --- Bottom strip: Benghazi ------------------------------------------
-    d.rectangle([24, 860, 1000, 992], fill=(16, 36, 52), outline=NAVY, width=3)
-    text_block(d, 44, 876, "UKRAINE DRONES HIT", BOLD(30), WHITE, 560, leading=38)
-    text_block(d, 44, 914, "RUSSIAN WARSHIP", BOLD(30), GOLD, 560, leading=38)
-    text_block(d, 44, 952, "OFF BENGHAZI", BOLD(30), GOLD, 560, leading=38)
-    draw_warship(d, 640, 872, 340, 104)
+    y = 606
+    for kicker, headline, deck in stories:
+        d.line([(M, y), (W - M, y)], fill=RULE, width=1)
+        d.text((M, y + 12), spaced(kicker), font=SANS_BOLD(15), fill=NAVY)
+        d.text((M, y + 34), headline, font=SERIF_BOLD(29), fill=INK)
+        d.text((M, y + 70), deck, font=SERIF(19), fill=GREY)
+        y += 92
 
     # --- Footer -----------------------------------------------------------
-    d.text((W // 2, 998), "23 NOVEMBER 2026  •  WORLD NEWS IN ONE IMAGE",
-           font=BOLD(16), fill=GREY, anchor="ma")
+    d.line([(M, 976), (W - M, 976)], fill=RULE, width=1)
+    d.text((W // 2, 986), spaced("23 NOVEMBER 2026  •  WORLD NEWS IN ONE IMAGE"),
+           font=SANS_BOLD(13), fill=GREY, anchor="ma")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     img.save(OUT, format="PNG")
